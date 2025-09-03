@@ -65,7 +65,12 @@
                                     </nav>
                                 </div>
                                 <div class="header-right-btn f-right d-none d-lg-block ml-20">
-                                    <a href="#" class="border-btn header-btn">Order Online</a>
+                                    <!-- Trigger button -->
+                                    <button type="button" data-toggle="modal" data-target="#chatpanel"
+                                        class="border-btn header-btn">
+                                        Order Online
+                                    </button>
+
                                 </div>
                             </div>
                         </div>
@@ -214,7 +219,7 @@
                     <use xlink:href="#bootstrap"></use>
                 </svg> </a> <span class="mb-3 mb-md-0 text-body-secondary">© <?php echo date('Y'); ?> Chillazi FoodMart</span> </div>
         <ul class="nav col-md-4 justify-content-end list-unstyled d-flex">
-           
+
             <a href="#"><i class="fab fa-twitter"></i></a>
             <a href="https://www.facebook.com/"><i class="fab fa-facebook-f"></i></a>
             <a href="#"><i class="fas fa-globe"></i></a>
@@ -225,6 +230,58 @@
     <div id="back-top">
         <a title="Go to Top" href="#"> <i class="fas fa-level-up-alt"></i></a>
     </div>
+    <!--Chat -->
+    <!-- AI Assistant Chat Modal -->
+    <div class="modal fade" id="chatpanel" tabindex="-1" role="dialog" aria-labelledby="chatpanelLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 class="modal-title" id="chatpanelLabel">AI Assistant</h5>
+                    <!-- Bootstrap 4 close button -->
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <div id="chatMessages" style="height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;"></div>
+                    <form id="chatForm">
+                        <div class="input-group">
+                            <input type="text" id="chatInput" class="form-control" placeholder="Type your message..." required>
+                            <div class="input-group-append">
+                                <button class="genric-btn danger circle medium" type="submit">Send</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- AI Assistant Chat Modal Script moved for maintainability -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatForm = document.getElementById('chatForm');
+            const chatInput = document.getElementById('chatInput');
+            const chatMessages = document.getElementById('chatMessages');
+
+            chatForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const userMsg = chatInput.value.trim();
+                if (!userMsg) return;
+                // Show user message
+                chatMessages.innerHTML += `<div class="mb-2"><strong>You:</strong> ${userMsg}</div>`;
+                chatInput.value = '';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                // Simulate AI response (replace with real API call)
+                setTimeout(function() {
+                    chatMessages.innerHTML += `<div class="mb-2"><strong>AI:</strong> Sorry, I'm just a demo assistant!</div>`;
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }, 700);
+            });
+        });
+    </script>
     <!-- JS here -->
     <script src="Public/js/vendor/modernizr-3.5.0.min.js"></script>
     <!-- Jquery, Popper, Bootstrap -->
@@ -258,6 +315,13 @@
     <!-- Jquery Plugins, main Jquery -->
     <script src="Public/js/plugins.js"></script>
     <script src="Public/js/main.js"></script>
+    <!-- Disable Preloader Script -->
+    <script>
+        window.addEventListener("load", function() {
+            document.getElementById("preloader-active").style.display = "none";
+        });
+    </script>
+
 
 </body>
 

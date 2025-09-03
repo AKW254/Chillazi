@@ -415,6 +415,16 @@ li {
   color: #dca73a;
   text-transform: uppercase;
 }
+
+/* Force Bootstrap modal above all other elements */
+.modal {
+  z-index: 2000 !important;
+}
+
+.modal-backdrop {
+  z-index: 1900 !important;
+}
+
 @keyframes zoom {
   0% {
     -webkit-transform: rotate(0deg);
