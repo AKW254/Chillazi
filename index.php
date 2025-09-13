@@ -232,56 +232,38 @@
     </div>
     <!--Chat -->
     <!-- AI Assistant Chat Modal -->
+    <!-- AI Assistant Chat Modal -->
     <div class="modal fade" id="chatpanel" tabindex="-1" role="dialog" aria-labelledby="chatpanelLabel" aria-hidden="true">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
 
                 <div class="modal-header">
                     <h5 class="modal-title" id="chatpanelLabel">AI Assistant</h5>
-                    <!-- Bootstrap 4 close button -->
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
 
                 <div class="modal-body">
-                    <div id="chatMessages" style="height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;"></div>
+                    <div id="chatMessages" style="height:300px; overflow-y:auto; border:1px solid #ccc; padding:10px; margin-bottom:10px;"></div>
+
                     <form id="chatForm">
                         <div class="input-group">
-                            <input type="text" id="chatInput" class="form-control" placeholder="Type your message..." required>
+                            <input type="text" id="chatInput" class="form-control" placeholder="Type here..." required>
                             <div class="input-group-append">
-                                <button class="genric-btn danger circle medium" type="submit">Send</button>
+                                <button class="btn btn-primary" type="submit">Send</button>
                             </div>
                         </div>
                     </form>
+
+                    <small id="chatHint" class="text-muted d-block mt-2"></small>
                 </div>
 
             </div>
         </div>
     </div>
-    <!-- AI Assistant Chat Modal Script moved for maintainability -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const chatForm = document.getElementById('chatForm');
-            const chatInput = document.getElementById('chatInput');
-            const chatMessages = document.getElementById('chatMessages');
 
-            chatForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const userMsg = chatInput.value.trim();
-                if (!userMsg) return;
-                // Show user message
-                chatMessages.innerHTML += `<div class="mb-2"><strong>You:</strong> ${userMsg}</div>`;
-                chatInput.value = '';
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-                // Simulate AI response (replace with real API call)
-                setTimeout(function() {
-                    chatMessages.innerHTML += `<div class="mb-2"><strong>AI:</strong> Sorry, I'm just a demo assistant!</div>`;
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }, 700);
-            });
-        });
-    </script>
+
     <!-- JS here -->
     <script src="Public/js/vendor/modernizr-3.5.0.min.js"></script>
     <!-- Jquery, Popper, Bootstrap -->
@@ -321,7 +303,237 @@
             document.getElementById("preloader-active").style.display = "none";
         });
     </script>
+    <!-- AI Assistant Chat Modal Script moved for maintainability -->
+    <script>
+        (function() {
+            var chatMessages = null;
+            var chatInput = null;
+            var chatForm = null;
+            var chatHint = null;
 
+            // Simple app state
+            var state = {
+                step: 'askName', // 'askName' -> 'askEmail' -> 'askPhone' -> 'chat'
+                name: '',
+                email: '',
+                phone: ''
+            };
+
+            // Helpers
+            function appendAI(text) {
+                chatMessages.innerHTML += '<div class="mb-2"><strong>AI:</strong> ' + escapeHtml(text) + '</div>';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function appendYou(text) {
+                chatMessages.innerHTML += '<div class="mb-2"><strong>You:</strong> ' + escapeHtml(text) + '</div>';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function escapeHtml(str) {
+                return (str || '').replace(/[&<>"]/g, function(t) {
+                    return ({
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '"': '&quot;'
+                    } [t]);
+                });
+            }
+
+            // Validation
+            function isValidName(v) {
+                return v && v.trim().length >= 2; // keep it friendly/non-formal
+            }
+
+            function isValidEmail(v) {
+                // simple but effective
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+            }
+            // Kenya-friendly phone normalization -> +2547XXXXXXXX or +2541XXXXXXXX
+            function normalizeKEPhone(v) {
+                if (!v) return '';
+                var s = v.replace(/\D+/g, ''); // remove non-digits
+                // Accept 07xxxxxxxx / 01xxxxxxxx
+                if (/^07\d{8}$/.test(s) || /^01\d{8}$/.test(s)) {
+                    return '+254' + s.substring(1); // 07... -> +2547...
+                }
+                // Accept 7xxxxxxxx or 1xxxxxxxx (missing leading 0)
+                if (/^[71]\d{8}$/.test(s)) {
+                    return '+254' + s;
+                }
+                // Accept 2547xxxxxxxx / 2541xxxxxxxx
+                if (/^254[71]\d{8}$/.test(s)) {
+                    return '+' + s;
+                }
+                // Accept +2547xxxxxxxx / +2541xxxxxxxx
+                if (/^\+254[71]\d{8}$/.test(v)) {
+                    return v;
+                }
+                return ''; // not valid (for our purposes)
+            }
+
+            // Typing indicator
+            var typingTimer = null;
+
+            function showTyping() {
+                clearTyping();
+                typingTimer = setTimeout(function() {
+                    chatMessages.innerHTML += '<div id="typing" class="mb-2"><em>AI is typing…</em></div>';
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }, 150);
+            }
+
+            function clearTyping() {
+                if (typingTimer) clearTimeout(typingTimer);
+                var t = document.getElementById('typing');
+                if (t) t.parentNode.removeChild(t);
+            }
+
+            // Step prompts
+            function askName() {
+                appendAI("Hey there 👋 What's your name?");
+                chatHint.textContent = "e.g., Jane / John Doe";
+                state.step = 'askName';
+            }
+
+            function askEmail() {
+                appendAI("Nice to meet you, " + state.name + "! What's your email?");
+                chatHint.textContent = "We'll use it to send order updates (e.g., you@example.com)";
+                state.step = 'askEmail';
+            }
+
+            function askPhone() {
+                appendAI("Great! Lastly, what’s your phone number?");
+                chatHint.textContent = "Kenya format is fine (07..., 01..., or +254...)";
+                state.step = 'askPhone';
+            }
+
+            function readyToChat() {
+                appendAI("All set, " + state.name + "! How can I help you today? You can ask about the menu, place an order, or anything else.");
+                chatHint.textContent = "";
+                state.step = 'chat';
+            }
+
+            // Handle submit
+            function onSubmit(e) {
+                e.preventDefault();
+                var msg = chatInput.value.trim();
+                if (!msg) return;
+
+                // Show user's message (always)
+                appendYou(msg);
+                chatInput.value = '';
+
+                // Branch by step
+                if (state.step === 'askName') {
+                    if (!isValidName(msg)) {
+                        appendAI("Got it — but could you share your name (at least 2 characters)?");
+                        return;
+                    }
+                    state.name = msg;
+                    askEmail();
+                    return;
+                }
+
+                if (state.step === 'askEmail') {
+                    if (!isValidEmail(msg)) {
+                        appendAI("Hmm, that email doesn’t look right. Mind checking the format (like you@example.com)?");
+                        return;
+                    }
+                    state.email = msg;
+                    askPhone();
+                    return;
+                }
+
+                if (state.step === 'askPhone') {
+                    var normalized = normalizeKEPhone(msg);
+                    if (!normalized) {
+                        appendAI("That phone number seems off. Use 07..., 01..., 2547..., or +2547... format.");
+                        return;
+                    }
+                    state.phone = normalized;
+                    readyToChat();
+                    return;
+                }
+
+                // Normal chat -> send to backend with captured profile
+                showTyping();
+                var payload = new URLSearchParams();
+                payload.append('customer_name', state.name);
+                payload.append('customer_email', state.email);
+                payload.append('customer_phone', state.phone);
+                payload.append('message', msg);
+
+                fetch('assistant.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                        },
+                        body: payload.toString()
+                    })
+                    .then(function(res) {
+                        return res.json();
+                    })
+                    .then(function(data) {
+                        clearTyping();
+                        if (data && data.response) {
+                            appendAI(data.response);
+                        } else if (data && data.reply) {
+                            appendAI(data.reply);
+                        } else if (data && data.error) {
+                            appendAI("Oops, there was an error: " + data.error);
+                        } else {
+                            appendAI("I didn’t get a response — please try again.");
+                        }
+                    })
+                    .catch(function(err) {
+                        clearTyping();
+                        appendAI("Network error — please try again.");
+                        console.error(err);
+                    });
+            }
+
+            // Init on DOM ready
+            document.addEventListener('DOMContentLoaded', function() {
+                chatMessages = document.getElementById('chatMessages');
+                chatInput = document.getElementById('chatInput');
+                chatForm = document.getElementById('chatForm');
+                chatHint = document.getElementById('chatHint');
+
+                chatForm.addEventListener('submit', onSubmit);
+
+                // When modal opens, reset state and start
+                $('#chatpanel').on('shown.bs.modal', function() {
+                    chatMessages.innerHTML = '';
+                    chatInput.value = '';
+                    state = {
+                        step: 'askName',
+                        name: '',
+                        email: '',
+                        phone: ''
+                    };
+                    askName();
+                    chatInput.focus();
+                });
+
+                // Optional: reset when closed
+                $('#chatpanel').on('hidden.bs.modal', function() {
+                    chatMessages.innerHTML = '';
+                    chatInput.value = '';
+                    chatHint.textContent = '';
+                    state = {
+                        step: 'askName',
+                        name: '',
+                        email: '',
+                        phone: ''
+                    };
+                });
+            });
+        })();
+    </script>
+
+    <!--AI Assistant Chat Modal Script-->
 
 </body>
 
