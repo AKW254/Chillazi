@@ -310,7 +310,8 @@
             var chatInput = null;
             var chatForm = null;
             var chatHint = null;
-
+            //conversation token for context (not implemented in this example)
+            var conversationToken = localStorage.getItem('conversation_token') || null;
             // Simple app state
             var state = {
                 step: 'askName', // 'askName' -> 'askEmail' -> 'askPhone' -> 'chat'
@@ -319,15 +320,18 @@
                 phone: ''
             };
 
-            // Helpers
+
+
             function appendAI(text) {
                 chatMessages.innerHTML += '<div class="mb-2"><strong>AI:</strong> ' + escapeHtml(text) + '</div>';
                 chatMessages.scrollTop = chatMessages.scrollHeight;
+
             }
 
             function appendYou(text) {
                 chatMessages.innerHTML += '<div class="mb-2"><strong>You:</strong> ' + escapeHtml(text) + '</div>';
                 chatMessages.scrollTop = chatMessages.scrollHeight;
+
             }
 
             function escapeHtml(str) {
@@ -464,6 +468,9 @@
                 payload.append('customer_email', state.email);
                 payload.append('customer_phone', state.phone);
                 payload.append('message', msg);
+                if (conversationToken) {
+                    payload.append('conversation_token', conversationToken);
+                }
 
                 fetch('assistant.php', {
                         method: 'POST',
@@ -477,15 +484,17 @@
                     })
                     .then(function(data) {
                         clearTyping();
-                        if (data && data.response) {
-                            appendAI(data.response);
-                        } else if (data && data.reply) {
+                        if (data && data.reply) {
                             appendAI(data.reply);
                         } else if (data && data.error) {
                             appendAI("Oops, there was an error: " + data.error);
-                        } else {
-                            appendAI("I didn’t get a response — please try again.");
                         }
+                        // Save conversation token if provided
+                        if (data && data.conversation_token) {
+                            conversationToken = data.conversation_token;
+                            localStorage.setItem('conversationToken', conversation_token);
+                        }
+
                     })
                     .catch(function(err) {
                         clearTyping();
@@ -503,32 +512,24 @@
 
                 chatForm.addEventListener('submit', onSubmit);
 
-                // When modal opens, reset state and start
-                $('#chatpanel').on('shown.bs.modal', function() {
-                    chatMessages.innerHTML = '';
-                    chatInput.value = '';
-                    state = {
-                        step: 'askName',
-                        name: '',
-                        email: '',
-                        phone: ''
-                    };
-                    askName();
-                    chatInput.focus();
-                });
 
-                // Optional: reset when closed
-                $('#chatpanel').on('hidden.bs.modal', function() {
-                    chatMessages.innerHTML = '';
+                $('#chatpanel').on('shown.bs.modal', function() {
+
                     chatInput.value = '';
-                    chatHint.textContent = '';
-                    state = {
-                        step: 'askName',
-                        name: '',
-                        email: '',
-                        phone: ''
-                    };
-                });
+                    if (!state.name) {
+                        askName();
+                    } else if (!state.email) {
+                        askEmail();
+                    } else if (!state.phone) {
+                        askPhone();
+                    } else {
+                        readyToChat();
+                    }
+                    chatInput.focus();
+                })
+
+
+
             });
         })();
     </script>

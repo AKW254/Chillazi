@@ -1,0 +1,36 @@
+# Composer packages
+node_modules/
+
+
+
+# Folders
+storage/
+build/
+tmp/
+temp/
+config/
+# config file
+.env
+
+
+
+# IDE or Editor specific files
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+
+
+# Miscellaneous
+*.tgz
+*.gz
+*.zip
+
+# Backup files
+*~ 
+*.bak
+
+# Package distribution
+package-lock.json
+yarn.lock
