@@ -1,183 +1,150 @@
 <?php
-header('Content-Type: application/json');
+
+// Ensure no output before JSON
+ob_start();
+
+header('Content-Type: application/json; charset=utf-8');
+
 include 'Config/config.php';
 include 'Functions/getConversationContext.php';
 include 'Functions/getStaticContext.php';
 include 'Functions/getPendingOrderContext.php';
 include 'Functions/buildSystemPrompt.php';
+include 'Functions/buildCondensedSystemPrompt.php';
 include 'Functions/processOrder.php';
 include 'Functions/Gemini.php';
 include 'Functions/detectOrder.php';
-include 'Functions/generateOrderSummary.php';
 include 'vendor/autoload.php';
 
+// Error handling
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Don't display errors to client
+ini_set('log_errors', 1);
 
-    // Input validation
-    $customer_name = trim($_POST['customer_name'] ?? '');
-    $customer_email = trim($_POST['customer_email'] ?? '');
-    $customer_phone = trim($_POST['customer_phone'] ?? '');
-    $message = trim($_POST['message'] ?? '');
-    $conversationToken = trim($_POST['conversationToken'] ?? '');
-
-    // Basic validation
-    if (empty($message)) {
-        echo json_encode(['error' => 'Message is required']);
-        exit;
+// Catch any fatal errors
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        ob_clean();
+        http_response_code(500);
+        echo json_encode(['error' => 'Server error occurred']);
     }
+});
+// Input validation
+$customer_name = trim($_POST['customer_name'] ?? '');
+$customer_email = trim($_POST['customer_email'] ?? '');
+$customer_phone = trim($_POST['customer_phone'] ?? '');
+$message = trim($_POST['message'] ?? '');
+$conversationToken = trim($_POST['conversation_token'] ?? '');
 
-    if (empty($customer_email) && empty($customer_phone)) {
-        echo json_encode(['error' => 'Either email or phone is required']);
-        exit;
-    }
+// Basic validation
+if (empty($message)) {
+    echo json_encode(['error' => 'Message is required']);
+    exit;
+}
 
-    // 🔹 Find or create customer
-    $customer_id = null;
-    $stmt = $mysqli->prepare("SELECT customer_id FROM customers WHERE customer_email = ? OR customer_phone = ? LIMIT 1");
-    $stmt->bind_param('ss', $customer_email, $customer_phone);
+if (empty($customer_email) && empty($customer_phone)) {
+    echo json_encode(['error' => 'Either email or phone is required']);
+    exit;
+}
+
+// 🔹 Find or create customer
+$customer_id = null;
+$stmt = $mysqli->prepare("SELECT customer_id FROM customers WHERE customer_email = ? OR customer_phone = ? LIMIT 1");
+$stmt->bind_param('ss', $customer_email, $customer_phone);
+$stmt->execute();
+$stmt->bind_result($customer_id);
+$stmt->fetch();
+$stmt->close();
+
+if (!$customer_id) {
+    $stmt = $mysqli->prepare("INSERT INTO customers (customer_name, customer_email, customer_phone) VALUES (?,?,?)");
+    $stmt->bind_param('sss', $customer_name, $customer_email, $customer_phone);
     $stmt->execute();
-    $stmt->bind_result($customer_id);
-    $stmt->fetch();
+    $customer_id = $stmt->insert_id;
     $stmt->close();
+}
 
-    if (!$customer_id) {
-        $stmt = $mysqli->prepare("INSERT INTO customers (customer_name, customer_email, customer_phone) VALUES (?,?,?)");
-        $stmt->bind_param('sss', $customer_name, $customer_email, $customer_phone);
-        $stmt->execute();
-        $customer_id = $stmt->insert_id;
-        $stmt->close();
-    }
-    // ✅ If no token, create new one
-    if (empty($conversationToken)) {
-        $conversationToken = 'conv_' . $customer_id . '_' . time() . '_' . bin2hex(random_bytes(4));
-    }
+// ✅ If no token, create new one
+if (empty($conversationToken) || $conversationToken === 'null') {
+    $conversationToken = 'conv_' . $customer_id . '_' . time() . '_' . bin2hex(random_bytes(4));
+}
 
-    // 🔹 Save user message
-    $stmt = $mysqli->prepare("INSERT INTO conversations (conversation_customer_id, conversation_role, message,conversation_token) VALUES (?,?,?,?)");
-    $role = 'user';
-    $stmt->bind_param('isss', $customer_id, $role, $message,$conversationToken);
-    $stmt->execute();
-    $conversation_id = $stmt->insert_id;
-    $stmt->close();
+// 🔹 Save user message
+$stmt = $mysqli->prepare("INSERT INTO conversations (conversation_customer_id, conversation_role, message, conversation_token) VALUES (?,?,?,?)");
+$role = 'user';
+$stmt->bind_param('isss', $customer_id, $role, $message, $conversationToken);
+$stmt->execute();
+$conversation_id = $stmt->insert_id;
+$stmt->close();
+
+// 🔹 Get conversation context using different strategies
+$conversationContext = getConversationContext($mysqli, $customer_id, $conversationToken);
+// 🔹 Static info (load once and cache)
+$staticContext = getStaticContext();
+
+// 🔹 Check for pending orders
+$pendingOrderData = getPendingOrderContext($mysqli, $customer_id);
+
+// Handle regular conversation (orders, questions, etc.)
+$isFirstMessage = $conversationContext['is_first_message'];
+
+//Initiate messages array
+$messages = [];
+if ($isFirstMessage) {
+    $systemPrompt = buildSystemPrompt($customer_name, $customer_email, $customer_phone, $staticContext, $pendingOrderData, $conversationContext);
+    $messages[] = [
+        'role' => 'user', // 🔹 map system → user for Gemini
+        'text' => $systemPrompt
+    ];
+    $messages[] = ['role' => 'user', 'text' => $message];
+} else {
+    // CONTEXT REFRESH for existing conversation
+    $systemPrompt = buildCondensedSystemPrompt($customer_name, $staticContext, $pendingOrderData, $conversationContext);
+    $messages[] = [
+        'role' => 'user', // 🔹 map system → user for Gemini
+        'text' => $systemPrompt
+    ];
+    $messages[] = ['role' => 'user', 'text' => $message];
+}
+
+try {
+    // 🔹 Call Gemini
+    $response = Gemini($messages, $geminiApiKey);
+    $response = (string)$response; // ensure string for DB + JSON
    
-    // 🔹 Get conversation context using different strategies
-    $conversationContext = getConversationContext($mysqli, $customer_id, $conversationToken);
+    // Default flags
+    $orderProcessResult = null;
+    $orderData = null;
+  
 
-    // 🔹 Static info (load once and cache)
-    $staticContext = getStaticContext();
-
-    // 🔹 Check for pending orders
-   $pendingOrderContext = getPendingOrderContext($mysqli, $customer_id);
-
-
-    // 🔹 Build system prompt (only for first message or context reset)
-    $isFirstMessage = $conversationContext['is_first_message'];
-    $messages = [];
-
-    if ($isFirstMessage) {
-        // Full context for new conversation
-        $systemPrompt = buildSystemPrompt($customer_name, $customer_email, $customer_phone, $staticContext, $pendingOrderContext);
-        $messages[] = [
-            'role' => 'user',
-            'text' => $systemPrompt . "\n\nCustomer says: " . $message
-        ];
-    } else {
-        // Continue existing conversation - only add recent context if needed
-        $messages = $conversationContext['messages'];
-        $messages[] = [
-            'role' => 'user',
-            'text' => $message
-        ];
+    // 🔹 Detect order from AI response
+    $orderData = detectOrder($response);
+    if ($orderData) {
+        $orderProcessResult = processOrder($mysqli, $customer_id, $orderData);
+        
     }
+
+    // 🔹 Save final assistant response (only once, after appending order/payment info)
+    $stmt = $mysqli->prepare("
+        INSERT INTO conversations (conversation_customer_id, conversation_role, message, conversation_token) 
+        VALUES (?,?,?,?)
+    ");
+    $assistantRole = 'assistant';
+    $stmt->bind_param('isss', $customer_id, $assistantRole, $response, $conversationToken);
+    $stmt->execute();
+    $stmt->close();
+
+    // 🔹 Send JSON response
     echo json_encode([
         'success' => true,
-        'messages' => $messages,
+        'reply' => $response,
         'conversation_token' => $conversationToken
-    ], JSON_UNESCAPED_UNICODE);
-    // try {
-    //     $response = Gemini($messages, $geminiApiKey);
-
-    //     // 🔹 Save assistant response
-    //     $stmt = $mysqli->prepare("INSERT INTO conversations (conversation_customer_id, conversation_role, message,conversation_token) VALUES (?,?,?,?)");
-    //     $assistantRole = 'assistant';
-    //     $stmt->bind_param('isss', $customer_id, $assistantRole, $response, $conversationToken);
-    //     $stmt->execute();
-    //     $stmt->close();
-        
-
-    //     // 🔹 Process AI Response for Orders
-    //     $orderData = detectOrder($response, $staticContext['menu_array']);
-
-    //     // 🔹 Process Order if Found
-    //     if ($orderData) {
-    //         //Convert order items to JSON string for storage
-    //         $orderDataJson = json_encode($orderData, JSON_UNESCAPED_UNICODE);
-            
-    //         $stmt = $mysqli->prepare("
-    //     INSERT INTO orders (
-    //         order_customer_id, 
-    //         order_text, 
-    //         order_subtotal,
-    //         order_tax,
-    //         order_delivery_fee,
-    //         order_total,
-    //         order_status,
-    //         order_currency
-    //     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    // ");
-
-    //         $stmt->bind_param(
-    //             'isddddss',
-    //             $customer_id,
-    //             $orderDataJson,
-    //             $orderData['subtotal'],
-    //             $orderData['tax'],
-    //             $orderData['delivery_fee'],
-    //             $orderData['total'],
-    //             $orderData['status'],
-    //             $orderData['currency']
-    //         );
-
-    //         $stmt->execute();
-    //         $order_id = $stmt->insert_id;
-    //         $stmt->close();
-
-    //         // Attach order ID to orderData
-    //         $orderData['order_id'] = $order_id;
-    //         // Generate order summary
-    //         $orderSummary = generateOrderSummary($orderData);
-
-          
-    //         // Append confirmation to response
-    //         $response .= "\n\n" . $orderSummary;
-    //         $response .= "\n\n✅ ORDER CONFIRMED! Order ID: #" . $order_id;
-    //         $response .= "\n💰 Total: KSH " . number_format($orderData['total'], 2);
-    //         $response .= "\n\n📱 PAYMENT OPTIONS:";
-    //         $response .= "\n1️⃣ M-Pesa: Send KSH " . number_format($orderData['total'], 2) . " to 0123456789";
-    //         $response .= "\n2️⃣ Cash on Delivery";
-    //         $response .= "\n3️⃣ Card on Delivery";
-    //         // Respond to frontend with order data
-    //         echo json_encode([
-    //             'success' => true,
-    //             'reply' => $response,
-    //             'order' => $orderData,
-    //             'order_id' => $order_id,
-    //             'conversation_token' => $conversationToken
-    //         ], JSON_UNESCAPED_UNICODE);
-    //     }else {
-    //         echo json_encode([
-    //             'success' => true,
-    //             'reply' => $response,
-    //             'conversationToken' => $conversationToken
-    //         ], JSON_UNESCAPED_UNICODE);
-    //     }
-
-       
-
-    // } catch (Exception $e) {
-    //     error_log("Gemini API Error: " . $e->getMessage());
-    //     echo json_encode([
-    //         'success' => false,
-    //         'error' => 'Failed to get response from AI service.'
-    //     ]);
-    // }
-   
+    ]);
+    exit;
+} catch (Exception $e) {
+    error_log("Gemini API Error: " . $e->getMessage());
+    $fallback = "Sorry, I’m having trouble responding right now. Could you repeat your last request?";
+    echo json_encode(['success' => false, 'reply' => $fallback]);
+    exit;
+}

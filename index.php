@@ -96,7 +96,13 @@
                                 <div class="hero__caption">
                                     <span data-animation="fadeInLeft" data-delay=".2s">Discover Your Teste</span>
                                     <h1 data-animation="fadeInLeft" data-delay=".4s">We belive good food offer great smile</h1>
-                                    <p data-animation="fadeInLeft" data-delay=".6s">Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat is aute irure.</p>
+                                    <p data-animation="fadeInLeft" data-delay=".6s">
+                                        At Chillazi FoodMart, we believe that great food brings people together.
+                                        From freshly grilled chicken and juicy burgers to smoothies and milkshakes made with love,
+                                        every meal is prepared with quality ingredients and served with care.
+                                        Whether you’re dining in or ordering online, our goal is to give you a taste of happiness in every bite.
+                                    </p>
+
 
                                 </div>
                             </div>
@@ -111,7 +117,12 @@
                                 <div class="hero__caption">
                                     <span data-animation="fadeInLeft" data-delay=".2s">Discover Your Teste</span>
                                     <h1 data-animation="fadeInLeft" data-delay=".4s">We belive good food offer great smile</h1>
-                                    <p data-animation="fadeInLeft" data-delay=".6s">Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat is aute irure.</p>
+                                    <p data-animation="fadeInLeft" data-delay=".6s">
+                                        Welcome to Chillazi FoodMart — your go-to spot for fresh, tasty meals.
+                                        From sizzling grilled chicken to creamy milkshakes, we prepare every order
+                                        with care so you can enjoy quality food anytime, anywhere.
+                                    </p>
+
 
                                 </div>
                             </div>
@@ -190,21 +201,21 @@
                         <div class="media contact-info">
                             <span class="contact-info__icon"><i class="ti-home"></i></span>
                             <div class="media-body">
-                                <h3>Buttonwood, California.</h3>
-                                <p>Rosemead, CA 91770</p>
+                                <h3>University way, Machakos.</h3>
+                                <p>P.o.box 23-90100,NextMall</p>
                             </div>
                         </div>
                         <div class="media contact-info">
                             <span class="contact-info__icon"><i class="ti-tablet"></i></span>
                             <div class="media-body">
-                                <h3>+1 253 565 2365</h3>
+                                <h3>+247565236589</h3>
                                 <p>Mon to Fri 9am to 6pm</p>
                             </div>
                         </div>
                         <div class="media contact-info">
                             <span class="contact-info__icon"><i class="ti-email"></i></span>
                             <div class="media-body">
-                                <h3><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5d2e282d2d322f291d3e3231322f31343f733e3230">[email&#160;protected]</a></h3>
+                                <h3><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5d2e282d2d322f291d3e3231322f31343f733e3230">chillazi@mail.com</a></h3>
                                 <p>Send us your query anytime!</p>
                             </div>
                         </div>
@@ -324,6 +335,12 @@
 
             function appendAI(text) {
                 chatMessages.innerHTML += '<div class="mb-2"><strong>AI:</strong> ' + escapeHtml(text) + '</div>';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            }
+
+            function appendorder(text) {
+                chatMessages.innerHTML += '<div class="mb-2"><strong>Our Order:</strong> ' + escapeHtml(text) + '</div>';
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
             }
@@ -480,22 +497,30 @@
                         body: payload.toString()
                     })
                     .then(function(res) {
-                        return res.json();
+                        return res.text(); // read as plain text first
                     })
-                    .then(function(data) {
-                        clearTyping();
-                        if (data && data.reply) {
-                            appendAI(data.reply);
-                        } else if (data && data.error) {
-                            appendAI("Oops, there was an error: " + data.error);
-                        }
-                        // Save conversation token if provided
-                        if (data && data.conversation_token) {
-                            conversationToken = data.conversation_token;
-                            localStorage.setItem('conversationToken', conversation_token);
+                    .then(function(raw) {
+                        console.log("🔍 Raw response:", raw); // see what PHP really returned
+                        try {
+                            var data = JSON.parse(raw); // try parsing safely
+                        } catch (err) {
+                            console.error("❌ JSON parse error:", err, raw);
+                            appendAI("Server sent invalid JSON. Check logs.");
+                            return;
                         }
 
+                        clearTyping();
+                        if (data) {
+                            if (data.reply) appendAI(data.reply);
+                            if (data.order_summary) appendorder(data.order_summary);
+                            if (data.error) appendAI("Oops, there was an error: " + data.error);
+                            if (data.conversation_token) {
+                                conversationToken = data.conversation_token;
+                                localStorage.setItem('conversation_token', conversationToken);
+                            }
+                        }
                     })
+
                     .catch(function(err) {
                         clearTyping();
                         appendAI("Network error — please try again.");
