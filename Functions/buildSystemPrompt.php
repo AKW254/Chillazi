@@ -23,7 +23,7 @@ ORDERING FLOW(BUSINESS RULES):
 2. Ask for confirmation: 'Perfect! 2 juices for KSH 300. Anything else?'
 3. When they say 'just that' or 'that's all'or Any agreement statement, PROCEED TO CHECKOUT
 4.generate receipt .
-- When customer confirms order (\"just that\", \"that's all\").After confirmation, generate receipt with items, total, tax, delivery, final amount and payment instructions.
+
 
 When generating receipts:
 - Always use the following format with no markdown, no asterisks, no extra punctuation.

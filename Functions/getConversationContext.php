@@ -1,8 +1,4 @@
 <?php
-
-/**
- * Get the last N messages for a customer in a given conversation
- */
 function getConversationContext($mysqli, $customer_id, $conversation_token, $limit = 20)
 {
     $stmt = $mysqli->prepare("
@@ -19,74 +15,133 @@ function getConversationContext($mysqli, $customer_id, $conversation_token, $lim
     $messages = [];
     while ($row = $result->fetch_assoc()) {
         $messages[] = [
-            'role'       => $row['conversation_role'] === 'user' ? 'user' : 'model',
+            'role'       => $row['conversation_role'] === 'user' ? 'user' : 'assistant',
             'text'       => $row['message'],
             'created_at' => $row['conversation_created_at']
         ];
     }
     $stmt->close();
 
-    // Reverse to chronological order
     $messages = array_reverse($messages);
+    if (!empty($messages)) array_pop($messages);
 
-    // Remove last message (the current one was just saved separately)
-    if (!empty($messages)) {
-        array_pop($messages);
-    }
-
-    $messageCount = count($messages);
+    // Extract latest intent with prices
+    $orderIntent = extractOrderWithMenu($messages, getStaticContext()['menu_array']);
 
     return [
-        'messages'         => $messages,
-        'summary'         => createConversationSummary($messages),
-        'message_count'    => $messageCount,
-        'is_first_message' => $messageCount === 0
+        'messages'     => $messages,
+        'order_intent' => $orderIntent,
+        'confirmed'    => detectConfirmation($messages)
     ];
 }
 
 /**
- * Create a summary of the conversation
+ * Extract items + map directly to menu prices
  */
-function createConversationSummary($messages)
+function extractOrderWithMenu($messages, $menu)
 {
-    if (empty($messages)) {
-        return "";
-    }
-
-    $summary = "RECENT CONTEXT (for strict ordering):\n";
-    $orderItems = [];
-    $lastUserMessage = "";
-
+    $items = [];
     foreach ($messages as $msg) {
-        if ($msg['role'] === 'user') {
-            $lastUserMessage = $msg['text'];
+        if ($msg['role'] !== 'user') continue;
 
-            // Detect items like "2 burgers", "1 juice"
-            if (preg_match_all('/(\d+)\s+([a-zA-Z ]+)/i', $msg['text'], $matches, PREG_SET_ORDER)) {
-                foreach ($matches as $m) {
-                    $orderItems[] = [
-                        'item'     => trim($m[2]),
-                        'quantity' => (int) $m[1]
-                    ];
-                }
-            }
+        if (preg_match_all('/(\d+|[a-zA-Z\s-]+)\s+([a-zA-Z ]+)/i', $msg['text'], $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $qtyWord  = strtolower(trim($m[1]));
+                $quantity = is_numeric($qtyWord) ? (int)$qtyWord : wordsToNumber($qtyWord);
+                if ($quantity <= 0) continue;
 
-            // Detect confirmation
-            if (preg_match('/\b(that\'s all|just that|only that|nothing else|done|no more)\b/i', $msg['text'])) {
-                $summary .= "CUSTOMER CONFIRMED ORDER.\n";
+                $rawItem = strtolower(trim($m[2]));
+                $price   = matchMenuItem($rawItem, $menu);
+
+                $items[] = [
+                    'item'     => $rawItem,
+                    'quantity' => $quantity,
+                    'price'    => $price,
+                    'total'    => $price * $quantity
+                ];
             }
         }
     }
+    return $items;
+}
 
-    if (!empty($orderItems)) {
-        $summary .= "CONFIRMED ITEMS: " . json_encode($orderItems, JSON_UNESCAPED_UNICODE) . "\n";
+/**
+ * Fuzzy match against menu
+ */
+function matchMenuItem($name, $menu)
+{
+    $name = strtolower(trim($name));
+    foreach ($menu as $menuItem => $price) {
+        $menuItem = strtolower($menuItem);
+        if ($name === $menuItem) return $price;
+        if (strpos($menuItem, $name) !== false || strpos($name, $menuItem) !== false) {
+            return $price;
+        }
     }
+    return 0; // unknown item
+}
 
-    if ($lastUserMessage) {
-        $summary .= "LAST USER MESSAGE: \"" . $lastUserMessage . "\"\n";
+/**
+ * Convert textual numbers (e.g. "twenty five") → integer
+ */
+function wordsToNumber($words)
+{
+    $map = [
+        'zero' => 0,
+        'one' => 1,
+        'two' => 2,
+        'three' => 3,
+        'four' => 4,
+        'five' => 5,
+        'six' => 6,
+        'seven' => 7,
+        'eight' => 8,
+        'nine' => 9,
+        'ten' => 10,
+        'eleven' => 11,
+        'twelve' => 12,
+        'thirteen' => 13,
+        'fourteen' => 14,
+        'fifteen' => 15,
+        'sixteen' => 16,
+        'seventeen' => 17,
+        'eighteen' => 18,
+        'nineteen' => 19,
+        'twenty' => 20,
+        'thirty' => 30,
+        'forty' => 40,
+        'fifty' => 50,
+        'sixty' => 60,
+        'seventy' => 70,
+        'eighty' => 80,
+        'ninety' => 90,
+        'hundred' => 100,
+        'thousand' => 1000
+    ];
+
+    $words = preg_split('/[\s-]+/', strtolower(trim($words)));
+    $total = 0;
+    $current = 0;
+
+    foreach ($words as $w) {
+        if (!isset($map[$w])) continue;
+        $val = $map[$w];
+
+        if ($val == 100 || $val == 1000) {
+            $current = ($current == 0 ? 1 : $current) * $val;
+            if ($val == 1000) {
+                $total += $current;
+                $current = 0;
+            }
+        } else {
+            $current += $val;
+        }
     }
+    return $total + $current;
+}
 
-    $summary .= "⚠️ DO NOT invent new items. Only use CONFIRMED ITEMS above unless user explicitly adds more.\n";
-
-    return $summary;
+function detectConfirmation($messages)
+{
+    $lastUser = end($messages)['text'] ?? '';
+    return preg_match('/\b(that\'s all|just that|done|no more|that all)\b/i', $lastUser);
 }

@@ -6,8 +6,7 @@ function getPendingOrderContext($mysqli, $customer_id)
         SELECT *
         FROM orders
         WHERE order_customer_id = ?
-        AND order_status = 'pending_confirmation' OR order_status = 'awaiting_payment'
-        ORDER BY order_id DESC LIMIT 1
+        ORDER BY order_id DESC 
     ");
     $stmt->bind_param('i', $customer_id);
     $stmt->execute();
@@ -23,7 +22,7 @@ function getPendingOrderContext($mysqli, $customer_id)
         }
 
         return [
-            'has_pending' => true,
+            
             'order_data'  => [
                 'order_id'       => $pendingOrder['order_id'],
                 'items'          => $decodedText['items'] ?? [],
@@ -34,12 +33,10 @@ function getPendingOrderContext($mysqli, $customer_id)
                 'order_status'   => $pendingOrder['order_status'],
                 'order_currency' => $pendingOrder['order_currency'],
                 'created_at'     => $pendingOrder['created_at']
-            ],
-            'context_message' => "\n\nIMPORTANT: Customer has pending order #" . $pendingOrder['order_id'] .
-                " for KSH " . number_format($pendingOrder['order_total'], 2) .
-                ". Status: " . $pendingOrder['order_status']
+            ]
+            
         ];
     }
 
-    return ['has_pending' => false, 'order_data' => null, 'context_message' => ""];
+    
 }
