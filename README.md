@@ -48,8 +48,7 @@ app/
 │   ├── buildCondensedSystemPrompt.php # AI system prompt context
 │   ├── getStaticContext.php    # Loads menu & static info
 │   └── getPendingOrderContext.php # Retrieves unconfirmed or past orders
-├── public/
-│   └── chat-endpoint.php       # Main API endpoint
+├─ assistant.php       # Main API endpoint
 └── vendor/                     # Composer dependencies
 ````
 
@@ -127,7 +126,7 @@ Loads up to 20 recent messages and isolates **current unconfirmed intent** for c
 ## ⚙️ Setup
 
 ```bash
-git clone https://github.com/YOURUSERNAME/smart-ai-assistant.git
+git clone https://github.com/YOURUSERNAME/chillazi.git
 cd smart-ai-assistant
 composer install
 cp Config/config.example.php Config/config.php
