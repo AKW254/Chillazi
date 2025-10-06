@@ -176,9 +176,5 @@ Feel free to fork, contribute, and build upon this project!
 
 ---
 
-```
 
----
 
-Would you like me to include **a “demo API call example” (using cURL or Axios)** in the README too, so others can test your assistant easily from Postman or JavaScript frontend?
-```
