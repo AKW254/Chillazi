@@ -14,4 +14,4 @@ try {
     exit;
 }
 //Open AI Key
-$geminiApiKey = "";
+$geminiApiKey = "AIzaSyCZKuSfJXwEFaci7ZyAPp0mFDrm9jUy33k";

@@ -1,5 +1,5 @@
 <?php
-function getConversationContext($mysqli, $customer_id, $conversation_token, $limit = 20)
+function getConversationContext($mysqli, $customer_id, $conversation_token, $limit = 5)
 {
     $stmt = $mysqli->prepare("
         SELECT conversation_role, message, conversation_created_at
