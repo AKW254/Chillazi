@@ -1,11 +1,11 @@
 
 # 🤖 Smart AI Assistant — Helpdesk & Waiter System
-
+ ![Chillazi](screenshots/homepage.png)
 An intelligent conversational AI assistant built in **PHP (with MySQL)** that acts as both a **helpdesk agent** and a **virtual waiter**.  
 It can chat naturally with customers, take food orders, confirm them, generate receipts, and manage ongoing conversations — all powered by **LLM (Gemini API)** integration.
 
 ---
-
+ ![Chillazi](screenshots/chatpanel.png)
 ## 🚀 Features
 
 ### 🧠 Conversational AI
