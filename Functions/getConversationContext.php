@@ -1,5 +1,17 @@
 <?php
-function getConversationContext($mysqli, $customer_id, $conversation_token, $limit = 5)
+// Functions/getConversationContext.php
+include_once __DIR__ . '/detectOrder.php';
+include_once __DIR__ . '/getStaticContext.php';
+
+/**
+ * @param mysqli $mysqli
+ * @param int $customer_id
+ * @param string $conversation_token
+ * @param string $siteUrl optional (for static context)
+ * @param int $limit messages to fetch
+ * @return array ['messages'=>[], 'order_intent'=>[], 'confirmed'=>bool]
+ */
+function getConversationContext($mysqli, int $customer_id, string $conversation_token, string $siteUrl = '', int $limit = 20): array
 {
     $stmt = $mysqli->prepare("
         SELECT conversation_role, message, conversation_created_at
@@ -8,6 +20,11 @@ function getConversationContext($mysqli, $customer_id, $conversation_token, $lim
         ORDER BY conversation_id DESC
         LIMIT ?
     ");
+    if (!$stmt) {
+        error_log("getConversationContext prepare failed: " . mysqli_error($mysqli));
+        return ['messages' => [], 'order_intent' => [], 'confirmed' => false];
+    }
+
     $stmt->bind_param('isi', $customer_id, $conversation_token, $limit);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -15,133 +32,44 @@ function getConversationContext($mysqli, $customer_id, $conversation_token, $lim
     $messages = [];
     while ($row = $result->fetch_assoc()) {
         $messages[] = [
-            'role'       => $row['conversation_role'] === 'user' ? 'user' : 'assistant',
-            'text'       => $row['message'],
+            'role' => ($row['conversation_role'] === 'user') ? 'user' : 'assistant',
+            'text' => $row['message'],
             'created_at' => $row['conversation_created_at']
         ];
     }
     $stmt->close();
 
+    // reverse to chronological order (oldest first)
     $messages = array_reverse($messages);
+
+    // remove last message if it's the "current" message saved separately upstream (your flow may already handle this)
+    // if you already insert the current user message before calling, then this keeps the previously-saved last message behavior
+    // Comment out the next line if you DO NOT store the current message before calling this function.
     if (!empty($messages)) array_pop($messages);
 
-    // Extract latest intent with prices
-    $orderIntent = extractOrderWithMenu($messages, getStaticContext()['menu_array']);
+    // load static context (menu)
+    $static = getStaticContext($mysqli, $siteUrl);
+    $menu = $static['menu_array'] ?? [];
+
+    // Extract order items from past user messages
+    $orderIntent = extractOrderWithMenu($messages, $menu);
+
+    // Detect confirmation: last user message only
+    $lastUserText = '';
+    for ($i = count($messages) - 1; $i >= 0; $i--) {
+        if ($messages[$i]['role'] === 'user') {
+            $lastUserText = (string)$messages[$i]['text'];
+            break;
+        }
+    }
+    $confirmed = false;
+    if ($lastUserText !== '') {
+        $confirmed = (bool) preg_match('/\b(that\'s all|that all|just that|that\'s it|done|no more|confirm|yes please|confirm order)\b/i', $lastUserText);
+    }
 
     return [
-        'messages'     => $messages,
+        'messages' => $messages,
         'order_intent' => $orderIntent,
-        'confirmed'    => detectConfirmation($messages)
+        'confirmed' => $confirmed
     ];
-}
-
-/**
- * Extract items + map directly to menu prices
- */
-function extractOrderWithMenu($messages, $menu)
-{
-    $items = [];
-    foreach ($messages as $msg) {
-        if ($msg['role'] !== 'user') continue;
-
-        if (preg_match_all('/(\d+|[a-zA-Z\s-]+)\s+([a-zA-Z ]+)/i', $msg['text'], $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $m) {
-                $qtyWord  = strtolower(trim($m[1]));
-                $quantity = is_numeric($qtyWord) ? (int)$qtyWord : wordsToNumber($qtyWord);
-                if ($quantity <= 0) continue;
-
-                $rawItem = strtolower(trim($m[2]));
-                $price   = matchMenuItem($rawItem, $menu);
-
-                $items[] = [
-                    'item'     => $rawItem,
-                    'quantity' => $quantity,
-                    'price'    => $price,
-                    'total'    => $price * $quantity
-                ];
-            }
-        }
-    }
-    return $items;
-}
-
-/**
- * Fuzzy match against menu
- */
-function matchMenuItem($name, $menu)
-{
-    $name = strtolower(trim($name));
-    foreach ($menu as $menuItem => $price) {
-        $menuItem = strtolower($menuItem);
-        if ($name === $menuItem) return $price;
-        if (strpos($menuItem, $name) !== false || strpos($name, $menuItem) !== false) {
-            return $price;
-        }
-    }
-    return 0; // unknown item
-}
-
-/**
- * Convert textual numbers (e.g. "twenty five") → integer
- */
-function wordsToNumber($words)
-{
-    $map = [
-        'zero' => 0,
-        'one' => 1,
-        'two' => 2,
-        'three' => 3,
-        'four' => 4,
-        'five' => 5,
-        'six' => 6,
-        'seven' => 7,
-        'eight' => 8,
-        'nine' => 9,
-        'ten' => 10,
-        'eleven' => 11,
-        'twelve' => 12,
-        'thirteen' => 13,
-        'fourteen' => 14,
-        'fifteen' => 15,
-        'sixteen' => 16,
-        'seventeen' => 17,
-        'eighteen' => 18,
-        'nineteen' => 19,
-        'twenty' => 20,
-        'thirty' => 30,
-        'forty' => 40,
-        'fifty' => 50,
-        'sixty' => 60,
-        'seventy' => 70,
-        'eighty' => 80,
-        'ninety' => 90,
-        'hundred' => 100,
-        'thousand' => 1000
-    ];
-
-    $words = preg_split('/[\s-]+/', strtolower(trim($words)));
-    $total = 0;
-    $current = 0;
-
-    foreach ($words as $w) {
-        if (!isset($map[$w])) continue;
-        $val = $map[$w];
-
-        if ($val == 100 || $val == 1000) {
-            $current = ($current == 0 ? 1 : $current) * $val;
-            if ($val == 1000) {
-                $total += $current;
-                $current = 0;
-            }
-        } else {
-            $current += $val;
-        }
-    }
-    return $total + $current;
-}
-
-function detectConfirmation($messages)
-{
-    $lastUser = end($messages)['text'] ?? '';
-    return preg_match('/\b(that\'s all|just that|done|no more|that all)\b/i', $lastUser);
 }

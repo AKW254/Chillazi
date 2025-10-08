@@ -24,9 +24,11 @@ class ComposerStaticInit3ffbe28fb745b145fa2fcd19500ebf5e
             'Symfony\\Polyfill\\Ctype\\' => 23,
             'Symfony\\Contracts\\Service\\' => 26,
             'Symfony\\Contracts\\HttpClient\\' => 29,
+            'Symfony\\Component\\Process\\' => 26,
             'Symfony\\Component\\HttpClient\\' => 29,
             'Symfony\\Component\\DomCrawler\\' => 29,
             'Symfony\\Component\\CssSelector\\' => 30,
+            'Spatie\\PdfToText\\' => 17,
         ),
         'P' => 
         array (
@@ -78,6 +80,10 @@ class ComposerStaticInit3ffbe28fb745b145fa2fcd19500ebf5e
         array (
             0 => __DIR__ . '/..' . '/symfony/http-client-contracts',
         ),
+        'Symfony\\Component\\Process\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/process',
+        ),
         'Symfony\\Component\\HttpClient\\' => 
         array (
             0 => __DIR__ . '/..' . '/symfony/http-client',
@@ -89,6 +95,10 @@ class ComposerStaticInit3ffbe28fb745b145fa2fcd19500ebf5e
         'Symfony\\Component\\CssSelector\\' => 
         array (
             0 => __DIR__ . '/..' . '/symfony/css-selector',
+        ),
+        'Spatie\\PdfToText\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/spatie/pdf-to-text/src',
         ),
         'Psr\\Log\\' => 
         array (

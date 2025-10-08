@@ -1,7 +1,7 @@
 <?php
 
 //Mysql connection
-$host='localhost';
+$host='127.0.0.1';
 $user='root';
 $pass='';
 $db= 'chillazi';
@@ -13,5 +13,7 @@ try {
     echo $e->getMessage();
     exit;
 }
-//Open AI Key
-$geminiApiKey = "";
+//Gemini AI Key
+$geminiApiKey = "AIzaSyCZKuSfJXwEFaci7ZyAPp0mFDrm9jUy33k";
+//URL to scrape
+$siteUrl = "http://chillazi.devlan.co.ke/index.php";

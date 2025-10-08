@@ -1,45 +1,44 @@
 <?php
-include 'scraper_summary.php';
-include 'menu_parser.php';
-function getStaticContext()
+// Functions/getStaticContext.php
+// returns ['scraped'=>string, 'menu_array'=>[ 'Milkshake'=>250, ... ]]
+
+include_once __DIR__ . '/scraper_summary.php'; // optional - only if you have it
+
+function getStaticContext($mysqli, string $siteUrl = ''): array
 {
-    // Cache static content to avoid reloading every time
-    static $staticCache = null;
+    static $cache = null;
+    if ($cache !== null) return $cache;
 
-    if ($staticCache === null) {
-        // Load scraped info
-        $scraped = scrapeAndSummarize(["http://127.0.0.1/Chillazi/index.php"], 2000);
-
-        // Load menu
-        $menuFile = "/../Storage/menu/menu.pdf";
-        $menuText = getMenuText(__DIR__ . $menuFile);
-
-        // Parse menu into array for order detection
-        function parseMenuToArray($menuText)
-        {
-            // Implement menu parsing logic here
-            // Example basic implementation:
-            $menuArray = [];
-            $lines = explode("\n", $menuText);
-
-            foreach ($lines as $line) {
-                if (preg_match('/(.+?)\s+(?:KSH|Ksh|ksh)?\s*(\d+)/i', $line, $matches)) {
-                    $itemName = trim($matches[1]);
-                    $price = (float) $matches[2];
-                    $menuArray[$itemName] = $price;
-                }
-            }
-
-            return $menuArray;
+    // 1) scraped text (optional)
+    $scraped = '';
+    if (!empty($siteUrl) && function_exists('scrapeAndSummarize')) {
+        try {
+            $scraped = (string) scrapeAndSummarize($siteUrl);
+        } catch (Throwable $e) {
+            error_log("Scrape error: " . $e->getMessage());
+            $scraped = '';
         }
-
-        $staticCache = [
-            'scraped' => $scraped,
-            'menu_text' => $menuText,
-            'menu_array' => parseMenuToArray($menuText)
-           
-        ];
     }
 
-    return $staticCache;
+    // 2) menu from DB
+    $menu_array = [];
+    $sql = "SELECT menu_name, menu_price FROM menus ORDER BY menu_name ASC";
+    $res = mysqli_query($mysqli, $sql);
+    if ($res) {
+        //In
+        while ($row = mysqli_fetch_assoc($res)) {
+            $name = trim($row['menu_name']);
+            if ($name === '') continue;
+            // normalize name exactly as DB (keep original casing)
+            $menu_array[$name] = (float)$row['menu_price'];
+        }
+        mysqli_free_result($res);
+        // Insert Header in the menu array(meals,categories and prices) 
+        $menu_array = array_merge(['Meals', 'Categories', 'Prices'], $menu_array);
+    }
+    $cache = [
+        'scraped' => $scraped,
+        'menu_array' => $menu_array
+    ];
+    return $cache;
 }

@@ -18,11 +18,20 @@ You are Chillazi Foodmart's AI assistant.
 - Never invent menu items.
 
 
+
 Customer: {$customer_name}
 Order intent: " . json_encode($orderItems) . "
 Confirmed? " . ($confirmed ? "Yes" : "No") . "
 Menu:
-{$staticContext['menu_text']}
+" . (
+    !empty($staticContext['menu_array'])
+        ? implode(", ", array_map(
+            fn($k, $v) => "$k (KSH $v)",
+            array_keys($staticContext['menu_array']),
+            array_values($staticContext['menu_array'])
+        ))
+        : 'No menu available'
+) . "
 Basic info:
 {$staticContext['scraped']}
 Order History: {$pendingOrderData['order_data']}

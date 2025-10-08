@@ -34,3 +34,4 @@ config/
 # Package distribution
 package-lock.json
 yarn.lock
+.sql

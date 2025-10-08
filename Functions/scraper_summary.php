@@ -14,36 +14,32 @@ use Symfony\Component\DomCrawler\Crawler;
  * @param int $limit   Character limit per page (default 2000)
  * @return string Summary text
  */
-function scrapeAndSummarize(array $urls, int $limit = 2000): string
+function scrapeAndSummarize($siteUrl): string
 {
     $http = new Client();
     $content = "";
-    foreach ($urls as $url) {
-        try {
-            $response = $http->get($url);
-            $html = (string) $response->getBody();
-            $crawler = new Crawler($html);
+    try {
+        $response = $http->get($siteUrl); // $urls is now a single URL string
+        $html = (string) $response->getBody();
+        $crawler = new Crawler($html);
 
-            // Remove script and style tags
-            $crawler->filter('script, style')->each(function ($node) {
-                foreach ($node as $n) {
-                    $n->parentNode->removeChild($n);
-                }
-            });
+        // Remove script and style tags
+        $crawler->filter('script, style')->each(function ($node) {
+            foreach ($node as $n) {
+                $n->parentNode->removeChild($n);
+            }
+        });
 
-            // Extract visible text from body
-            $text = $crawler->filter('body')->text();
-            $content .= substr($text, 0, $limit) . "\n\n";
-        } catch (\Exception $e) {
-            $content .= "Error scraping {$url}: " . $e->getMessage() . "\n\n";
-        }
+        // Extract visible text from body
+        $text = $crawler->filter('body')->text();
+        $content .= substr($text, 0, 2000) . "\n\n";
+    } catch (\Exception $e) {
+        $content .= "Error scraping {$siteUrl}: " . $e->getMessage() . "\n\n";
     }
 
     if (trim($content) === "") {
-        return "Sorry, I could not fetch content from the provided pages.";
+        return "Sorry, I could not fetch content from the provided page.";
     }
 
-
-
-    return  $content ?? "No summary generated.";
+    return $content ?? "No summary generated.";
 }
