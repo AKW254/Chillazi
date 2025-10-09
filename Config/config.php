@@ -14,6 +14,6 @@ try {
     exit;
 }
 //Gemini AI Key
-$geminiApiKey = "AIzaSyCZKuSfJXwEFaci7ZyAPp0mFDrm9jUy33k";
+$geminiApiKey = "";
 //URL to scrape
 $siteUrl = "http://chillazi.devlan.co.ke/index.php";
